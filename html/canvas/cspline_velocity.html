@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html>
+
+<style>
+* {
+    color: #fff;
+    fill: none;
+    font-family: sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    stroke: #fff;
+}
+
+#points > div {
+    align-items: center;
+    display: flex;
+}
+
+#points > div > :not(:first-child) {
+    margin-left: 5px;
+}
+
+#visibility label {
+    display: flex;
+    justify-content: space-between;
+}
+
+.bordered-div {
+    border: 2px solid #fff;
+    padding: 5px;
+    width: fit-content;
+}
+
+.bordered-div:not(:first-child) {
+    margin-top: 5px;
+}
+
+button {
+    background-color: #000;
+    border: 2px solid #fff;
+    cursor: pointer;
+    padding: 2px 5px;
+    user-select: none;
+}
+
+button.svg-button {
+    padding: 2px 2px;
+}
+
+button:hover {
+    background-color: #fff;
+    color: #000;
+}
+
+button:hover svg * {
+    stroke: #000;
+}
+
+canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+input[type=number] {
+    width: 5em;
+}
+
+input, option, select {
+    color: #000;
+}
+
+svg path {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+}
+</style>
+
+<body style="background-color: #000;">
+    <div id="canvases">
+        <canvas id="canvas-spline" style="z-index: 0;"></canvas>
+        <canvas id="canvas-velocity-vectors" style="z-index: 1;"></canvas>
+        <canvas id="canvas-points" style="z-index: 2;"></canvas>
+        <canvas id="canvas-velocities" style="z-index: 3;"></canvas>
+    </div>
+    <div id="points" class="bordered-div">
+        <button id="add-point">Add point</button>
+    </div>
+    <div id="visibility" class="bordered-div">
+        <label>Spline <input id="spline-vis" type="checkbox" checked></label>
+        <label>Velocity vectors <input id="velocity-vectors-vis" type="checkbox" checked></label>
+        <label>Points <input id="points-vis" type="checkbox" checked></label>
+        <label>Velocities <input id="velocities-vis" type="checkbox" checked></label>
+    </div>
+    <div id="settings" class="bordered-div">
+        <label>Width: <input id="width" type="number" min="1" max="1000"></label> <br>
+        <label>Height: <input id="height" type="number"  min="1" max="1000"></label> <br>
+        <label>Resolution: <input id="resolution" type="number" min="1" max="1000"></label>
+        <select id="resolution-type">
+            <option value="pixelsPerUnitLength">pixels per unit length</option>
+            <option value="perPixel">per pixel</option>
+        </select> <br>
+        <label>Sample points per curve: <input id="sample-points" type="number" min="1"></label> <br>
+        <label>Point radius: <input id="point-radius" type="number" min="1" max="100"></label> <br>
+        <label>Velocity radius: <input id="velocity-radius" type="number" min="1" max="100"></label> <br>
+        <label>Velocity vector width: <input id="velocity-vector-width" type="number" min="1" max="100"></label> <br>
+        <label>Spline width: <input id="spline-width" type="number" min="1" max="100"></label>
+        Origin
+        <label>X: <input id="origin-x" type="number" style="width: 5em;"></label>
+        <label>Y: <input id="origin-y" type="number" style="width: 5em;"></label>
+        <button id="apply-settings">Apply</button>
+        <button id="reset-settings">Reset</button>
+    </div>
+</body>
+
+<script>
+let basis = [
+    t => (2*t - 3)*t*t + 1,
+    t => ((t - 2)*t + 1)*t,
+    t => (-2*t + 3)*t*t,
+    t => (t - 1)*t*t
+];
+
+function curve(p0, v0, p1, v1, t) {
+    return basis[0](t)*p0 + basis[1](t)*v0 + basis[2](t)*p1 + basis[3](t)*v1;
+}
+
+function indexFromPointElement(element) {
+    return +element.getAttribute("index");
+}
+function pointElementFromIndex(index) {
+    return pointsElement.children[index + 1];
+}
+function rewriteInputPoints() {
+    Array.from(pointsElement.getElementsByClassName("point")).forEach(point => point.remove());
+    points.forEach((point, i) => {
+        let newPointElement = document.createElement("div");
+        newPointElement.classList.add("point", "bordered-div");
+        newPointElement.setAttribute("index", i);
+        newPointElement.innerHTML = newPointInnerHTML(i, point);
+        pointsElement.append(newPointElement);
+    });
+    refreshCanvas();
+}
+function updatePoint(element, type) {
+    let index = indexFromPointElement(element.parentNode.parentNode);
+    points[index][type] = +element.value;
+    refreshCanvas();
+}
+function toggleVis(element) {
+    if (element.style.display === "") element.style.display = "none";
+    else if (element.style.display === "none") element.style.display = "";
+}
+
+function length2pixel(coord) {
+    if (resolutionType === "pixelsPerUnitLength") {
+        return coord * resolution;
+    }
+    if (resolutionType === "perPixel") {
+        return coord / resolution;
+    }
+}
+
+function addPoint(index=points.length) {
+    points.splice(index, 0, {
+        x: 0,
+        y: 0,
+        velocityX: 0,
+        velocityY: 0
+    });
+    if (selectedIndex >= index) selectedIndex++;
+    rewriteInputPoints();
+}
+function selectPoint(element) {
+    deselect();
+    selectedIndex = indexFromPointElement(element.parentNode);
+    selectedType = "point";
+    let selected = element.parentNode;
+    selected.children[3].innerHTML = "Deselect";
+    selected.children[3].onclick = deselect;
+    refreshCanvas();
+}
+function selectVelocity(element) {
+    deselect();
+    selectedIndex = indexFromPointElement(element.parentNode);
+    selectedType = "velocity";
+    let selected = element.parentNode;
+    selected.children[6].innerHTML = "Deselect velocity";
+    selected.children[6].onclick = deselect;
+    refreshCanvas();
+}
+function deselect() {
+    if (selectedIndex !== -1) {
+        let prevSelected = pointElementFromIndex(selectedIndex);
+        if (selectedType === "point") {
+            prevSelected.children[3].innerHTML = "Select";
+            prevSelected.children[3].onclick = function () {selectPoint(this);};
+        }
+        if (selectedType === "velocity") {
+            prevSelected.children[6].innerHTML = "Select velocity";
+            prevSelected.children[6].onclick = function () {selectVelocity(this);};
+        }
+    }
+    selectedIndex = -1;
+    refreshCanvas();
+}
+function movePointUpwards(element) {
+    let index = indexFromPointElement(element.parentNode);
+    let point = points.splice(index, 1)[0];
+    points.splice(Math.max(index - 1, 0), 0, point);
+    if (selectedIndex >= 0) {
+        if (selectedIndex === index) selectedIndex = Math.max(index - 1, 0);
+        else if (selectedIndex === index-1) selectedIndex++;
+    }
+    rewriteInputPoints();
+}
+function movePointDownwards(element) {
+    let index = indexFromPointElement(element.parentNode);
+    let point = points.splice(index, 1)[0];
+    points.splice(Math.min(index + 1, points.length), 0, point);
+    if (selectedIndex >= 0) {
+        if (selectedIndex === index) selectedIndex = Math.min(index + 1, points.length);
+        else if (selectedIndex === index+1) selectedIndex--;
+    }
+    rewriteInputPoints();
+}
+function addPointAbove(element) {
+    addPoint(indexFromPointElement(element.parentNode));
+}
+function addPointBelow(element) {
+    addPoint(indexFromPointElement(element.parentNode) + 1);
+}
+function deletePoint(element) {
+    let index = indexFromPointElement(element.parentNode);
+    points.splice(index, 1);
+    if (selectedIndex === index) deselect();
+    else if (selectedIndex > index) selectedIndex--;
+    rewriteInputPoints();
+}
+
+function applySettingsCheckValid() {
+    if (widthInputElement.value === "") {
+        alert("Width is empty or invalid");
+        return false;
+    }
+    if (!Number.isInteger(+widthInputElement.value)) {
+        alert("Width must be an integer");
+        return false;
+    }
+    if (+widthInputElement.value <= 0) {
+        alert("Width cannot be negative or zero");
+        return false;
+    }
+    if (+widthInputElement.value > 1000) {
+        alert("Width cannot be greater than 1000");
+        return false;
+    }
+    if (heightInputElement.value === "") {
+        alert("Height is empty or invalid");
+        return false;
+    }
+    if (!Number.isInteger(+heightInputElement.value)) {
+        alert("Height must be an integer");
+        return false;
+    }
+    if (+heightInputElement.value <= 0) {
+        alert("Height cannot be negative or zero");
+        return false;
+    } 
+    if (+heightInputElement.value > 1000) {
+        alert("Height cannot be greater than 1000");
+        return false;
+    }
+    if (resolutionInputElement.value === "") {
+        alert("Resolution is empty or invalid");
+        return false;
+    }
+    if (+resolutionInputElement.value <= 0) {
+        alert("Resolution cannot be negative or zero");
+        return false;
+    }
+    if (+resolutionInputElement.value > 1000) {
+        alert("Resolution cannot be greater than 1000");
+        return false;
+    }
+    if (samplePointsInputElement.value === "") {
+        alert("Sample points per curve is empty or invalid");
+        return false;
+    }
+    if (!Number.isInteger(+samplePointsInputElement.value)) {
+        alert("Sample points per curve must be an integer");
+        return false;
+    }
+    if (+samplePointsInputElement.value <= 0) {
+        alert("Sample points per curve cannot be negative or zero");
+        return false;
+    }
+    if (pointRadiusInputElement.value === "") {
+        alert("Point radius is empty or invalid");
+        return false;
+    }
+    if (!Number.isInteger(+pointRadiusInputElement.value)) {
+        alert("Point radius must be an integer");
+        return false;
+    }
+    if (+pointRadiusInputElement.value <= 0) {
+        alert("Point radius cannot be negative or zero");
+        return false;
+    }
+    if (+pointRadiusInputElement.value > 100) {
+        alert("Point radius cannot be greater than 100");
+        return false;
+    }
+    if (velocityRadiusInputElement.value === "") {
+        alert("Velocity radius is empty or invalid");
+        return false;
+    }
+    if (!Number.isInteger(+velocityRadiusInputElement.value)) {
+        alert("Velocity radius must be an integer");
+        return false;
+    }
+    if (+velocityRadiusInputElement.value <= 0) {
+        alert("Velocity radius cannot be negative or zero");
+        return false;
+    }
+    if (+velocityRadiusInputElement.value > 100) {
+        alert("Velocity radius cannot be greater than 100");
+        return false;
+    }
+    if (velocityVectorWidthInputElement.value === "") {
+        alert("Velocity vector width is empty or invalid");
+        return false;
+    }
+    if (!Number.isInteger(+velocityVectorWidthInputElement.value)) {
+        alert("Velocity vector width must be an integer");
+        return false;
+    }
+    if (+velocityVectorWidthInputElement.value <= 0) {
+        alert("Velocity vector width cannot be negative or zero");
+        return false;
+    }
+    if (+velocityVectorWidthInputElement.value > 100) {
+        alert("Velocity vector width cannot be greater than 100");
+        return false;
+    }
+    if (splineWidthInputElement.value === "") {
+        alert("Spline width is empty or invalid");
+        return false;
+    }
+    if (!Number.isInteger(+splineWidthInputElement.value)) {
+        alert("Spline width must be an integer");
+        return false;
+    }
+    if (+splineWidthInputElement.value <= 0) {
+        alert("Spline width cannot be negative or zero");
+        return false;
+    }
+    if (+splineWidthInputElement.value > 100) {
+        alert("Spline width cannot be greater than 100");
+        return false;
+    }
+    if (originXInputElement.value === "") {
+        alert("Origin X is empty or invalid");
+        return false;
+    }
+    if (originYInputElement.value === "") {
+        alert("Origin Y is empty or invalid");
+        return false;
+    }
+    return true;
+}
+
+// Reverse of rewriteInputSettings
+function applySettings() {
+    if (!applySettingsCheckValid()) return;
+    width = +widthInputElement.value;
+    height = +heightInputElement.value;
+    resolution = +resolutionInputElement.value;
+    resolutionType = resolutionTypeSelectElement.value;
+    samplePoints = +samplePointsInputElement.value;
+    pointRadius = +pointRadiusInputElement.value;
+    velocityRadius = +velocityRadiusInputElement.value;
+    velocityVectorWidth = +velocityVectorWidthInputElement.value;
+    splineWidth = +splineWidthInputElement.value;
+    originX = +originXInputElement.value;
+    originY = +originYInputElement.value;
+    refreshCanvasSize();
+    refreshCanvas();
+}
+
+// Reverse of applySettings
+function rewriteInputSettings() {
+    widthInputElement.value = width.toString();
+    heightInputElement.value = height.toString();
+    resolutionInputElement.value = resolution.toString();
+    resolutionTypeSelectElement.value = resolutionType;
+    samplePointsInputElement.value = samplePoints.toString();
+    pointRadiusInputElement.value = pointRadius.toString();
+    velocityRadiusInputElement.value = velocityRadius.toString();
+    velocityVectorWidthInputElement.value = velocityVectorWidth.toString();
+    splineWidthInputElement.value = splineWidth.toString();
+    originXInputElement.value = originX.toString();
+    originYInputElement.value = originY.toString();
+}
+
+function resetSettings() {
+    width = 500;
+    height = 500;
+    resolution = 50;
+    resolutionType = "pixelsPerUnitLength";
+    samplePoints = 20;
+    pointRadius = 5;
+    velocityRadius = 3;
+    velocityVectorWidth = 2;
+    splineWidth = 2;
+    originX = 250;
+    originY = 250;
+    rewriteInputSettings();
+    applySettings();
+}
+
+function refreshCanvasSize() {
+    canvasSplineElement.setAttribute("width", width.toString());
+    canvasSplineElement.setAttribute("height", height.toString());
+    canvasVelocityVectorsElement.setAttribute("width", width.toString());
+    canvasVelocityVectorsElement.setAttribute("height", height.toString());
+    canvasPointsElement.setAttribute("width", width.toString());
+    canvasPointsElement.setAttribute("height", height.toString());
+    canvasVelocitiesElement.setAttribute("width", width.toString());
+    canvasVelocitiesElement.setAttribute("height", height.toString());
+    canvasesElement.style.minHeight = height + 2*borderWidth + 10;
+}
+function refreshCanvas() {
+    ctxSpline.clearRect(0, 0, width, height);
+    ctxVelocityVectors.clearRect(0, 0, width, height);
+    ctxPoints.clearRect(0, 0, width, height);
+    ctxVelocities.clearRect(0, 0, width, height);
+
+    points.forEach((point, i) => {
+        if (selectedType === "point" && selectedIndex === i) ctxPoints.fillStyle = "#0a0";
+        else ctxPoints.fillStyle = "#fff";
+        ctxPoints.beginPath();
+        ctxPoints.arc(originX + length2pixel(point.x), originY + length2pixel(point.y), pointRadius, 0, 2*Math.PI);
+        ctxPoints.fill();
+
+        if (selectedType === "velocity" && selectedIndex === i) ctxVelocities.fillStyle = "#aa0";
+        else ctxVelocities.fillStyle = "#0aa";
+        ctxVelocities.beginPath();
+        ctxVelocities.arc(originX + length2pixel(point.x + point.velocityX), originY + length2pixel(point.y + point.velocityY), velocityRadius, 0, 2*Math.PI);
+        ctxVelocities.fill();
+
+        if (selectedType === "velocity" && selectedIndex === i) ctxVelocityVectors.strokeStyle = "#aa0";
+        else ctxVelocityVectors.strokeStyle = "#0aa";       
+        ctxVelocityVectors.lineWidth = velocityVectorWidth;
+        ctxVelocityVectors.beginPath();
+        ctxVelocityVectors.moveTo(originX + length2pixel(point.x), originY + length2pixel(point.y));
+        ctxVelocityVectors.lineTo(originX + length2pixel(point.x + point.velocityX), originY + length2pixel(point.y + point.velocityY));
+        ctxVelocityVectors.stroke();
+
+        if (i < points.length - 1) {
+            ctxSpline.strokeStyle = "#fff";
+            ctxSpline.lineWidth = splineWidth;
+            ctxSpline.beginPath();
+            ctxSpline.moveTo(originX + length2pixel(point.x), originY + length2pixel(point.y));
+            for (let j = 0; j < samplePoints; j++) {
+                ctxSpline.lineTo(originX + length2pixel(curve(point.x, point.velocityX, points[i+1].x, points[i+1].velocityX, (j+1)/samplePoints)), originY + length2pixel(curve(point.y, point.velocityY, points[i+1].y, points[i+1].velocityY, (j+1)/samplePoints)));
+            }
+            ctxSpline.stroke();
+        }
+    });
+}
+
+const svgs = {
+    movePointUpwards: '<svg width="24" height="24"><path d="M6,10 L12,4 L18,10 M12,4 L12,20"/></svg>',
+    movePointDownwards: '<svg width="24" height="24"><path d="M6,14 L12,20 L18,14 M12,20 L12,4"/></svg>',
+    addPointAbove: '<svg width="24" height="24"><path d="M7,7 L12,2 L17,7 M12,10 L12,22 M6,16 L18,16"/></svg>',
+    addPointBelow: '<svg width="24" height="24"><path d="M7,17 L12,22 L17,17 M12,14 L12,2 M6,8 L18,8"/></svg>',
+    deletePoint: '<svg width="24" height="24"><path d="M6,6 L18,18 M18,6 L6,18"/></svg>'
+}
+
+const newPointInnerHTML = (index, {x=0, y=0, velocityX=0, velocityY=0}={}) => `<span>${index}</span>
+<label>X: <input class="point-x" type="number" value="${x}" oninput="updatePoint(this, 'x');" style="width: 5em;"></label>
+<label>Y: <input class="point-y" type="number" value="${y}" oninput="updatePoint(this, 'y');" style="width: 5em;"></label>
+<button onclick="selectPoint(this);">Select</button>
+<label>Velocity X: <input class="velocity-x" type="number" value="${velocityX}" oninput="updatePoint(this, 'velocityX');" style="width: 5em;"></label>
+<label>Velocity Y: <input class="velocity-y" type="number" value="${velocityY}" oninput="updatePoint(this, 'velocityY');" style="width: 5em;"></label>
+<button onclick="selectVelocity(this);">Select velocity</button>
+<button class="svg-button" onclick="movePointUpwards(this);">${svgs.movePointUpwards}</button>
+<button class="svg-button" onclick="movePointDownwards(this);">${svgs.movePointDownwards}</button>
+<button class="svg-button" onclick="addPointAbove(this);">${svgs.addPointAbove}</button>
+<button class="svg-button" onclick="addPointBelow(this);">${svgs.addPointBelow}</button>
+<button class="svg-button" onclick="deletePoint(this);">${svgs.deletePoint}</button>`;
+
+let width;
+let height;
+let resolution;
+let resolutionType; // "pixelsPerUnitLength" | "perPixel"
+let samplePoints;
+let pointRadius;
+let velocityRadius;
+let velocityVectorWidth;
+let splineWidth;
+let originX;
+let originY;
+let borderWidth = 2;
+let points = []; // [{x, y, velocityX, velocityY}, ...]
+let selectedIndex = -1;
+let selectedType; // "point" | "velocity"
+
+const canvasesElement = document.getElementById("canvases");
+const canvasSplineElement = document.getElementById("canvas-spline");
+const canvasVelocityVectorsElement = document.getElementById("canvas-velocity-vectors");
+const canvasPointsElement = document.getElementById("canvas-points");
+const canvasVelocitiesElement = document.getElementById("canvas-velocities");
+const pointsElement = document.getElementById("points");
+const addPointElement = document.getElementById("add-point");
+const splineVisCheckboxElement = document.getElementById("spline-vis");
+const velocityVectorsVisCheckboxElement = document.getElementById("velocity-vectors-vis");
+const pointsVisCheckboxElement = document.getElementById("points-vis");
+const velocitiesVisCheckboxElement = document.getElementById("velocities-vis");
+const widthInputElement = document.getElementById("width");
+const heightInputElement = document.getElementById("height");
+const resolutionInputElement = document.getElementById("resolution");
+const resolutionTypeSelectElement = document.getElementById("resolution-type");
+const samplePointsInputElement = document.getElementById("sample-points");
+const pointRadiusInputElement = document.getElementById("point-radius");
+const velocityRadiusInputElement = document.getElementById("velocity-radius");
+const velocityVectorWidthInputElement = document.getElementById("velocity-vector-width");
+const splineWidthInputElement = document.getElementById("spline-width");
+const originXInputElement = document.getElementById("origin-x");
+const originYInputElement = document.getElementById("origin-y");
+const applySettingsElement = document.getElementById("apply-settings");
+const resetSettingsElement = document.getElementById("reset-settings");
+
+const ctxSpline = canvasSplineElement.getContext("2d");
+const ctxVelocityVectors = canvasVelocityVectorsElement.getContext("2d");
+const ctxPoints = canvasPointsElement.getContext("2d");
+const ctxVelocities = canvasVelocitiesElement.getContext("2d");
+
+resetSettings();
+refreshCanvasSize();
+canvasSplineElement.style.border = `${borderWidth.toString()}px solid white`;
+canvasVelocityVectorsElement.style.border = `${borderWidth.toString()}px solid white`;
+canvasPointsElement.style.border = `${borderWidth.toString()}px solid white`;
+canvasVelocitiesElement.style.border = `${borderWidth.toString()}px solid white`;
+
+addPointElement.onclick = _ => addPoint();
+splineVisCheckboxElement.onclick = _ => toggleVis(canvasSplineElement);
+velocityVectorsVisCheckboxElement.onclick = _ => toggleVis(canvasVelocityVectorsElement);
+pointsVisCheckboxElement.onclick = _ => toggleVis(canvasPointsElement);
+velocitiesVisCheckboxElement.onclick = _ => toggleVis(canvasVelocitiesElement);
+applySettingsElement.onclick = _ => applySettings();
+resetSettingsElement.onclick = _ => resetSettings();
+</script>
+
+</html>

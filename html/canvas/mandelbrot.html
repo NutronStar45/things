@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+
+<body style="background-color: #000;">
+    <canvas id="layer0" style="position: absolute; left: 0; top: 0; z-index: 0;"></canvas>
+    <canvas id="layer1" style="position: absolute; left: 0; top: 0; z-index: 1;"></canvas>
+</body>
+
+<script>
+    function pixelColor(iterations, maxIterations) {
+        if (iterations >= maxIterations) return "#fff";
+        return "#000";
+    }
+
+    function magnitude(real, imag) {
+        return Math.sqrt(real*real + imag*imag);
+    }
+
+    function nextIteration(currentReal, currentImag, real, imag) {
+        return [currentReal*currentReal - currentImag*currentImag + real, 2*currentReal*currentImag + imag];
+    }
+
+    function canvasPixelToComplex(x, y) {
+        return [
+            (x + 0.5 - originXInCanvasPixels) * unitLengthsPerCanvasPixel,
+            (y + 0.5 - originYInCanvasPixels) * unitLengthsPerCanvasPixel
+        ];
+    }
+
+    function pixelToComplex(x, y) {
+        return [
+            (x/pixelsPerCanvasPixel + 0.5 - originXInCanvasPixels) * unitLengthsPerCanvasPixel,
+            (y/pixelsPerCanvasPixel + 0.5 - originYInCanvasPixels) * unitLengthsPerCanvasPixel
+        ]
+    }
+
+    function complexToPixel(real, imag) {
+        return [
+            Math.round((real / unitLengthsPerCanvasPixel + originXInCanvasPixels - 0.5) * pixelsPerCanvasPixel),
+            Math.round((imag / unitLengthsPerCanvasPixel + originYInCanvasPixels - 0.5) * pixelsPerCanvasPixel)
+        ];
+    }
+
+    // Change here
+    const unitLengthsPerCanvasPixel = .004;
+    const pixelsPerCanvasPixel = 1;
+    const widthInUnitLengths = 4;
+    const heightInUnitLengths = 4;
+    const borderWidthInPixels = 2;
+    const maxAcceptibleMagnitude = 2;
+    const maxIterations = 50;
+    const originXInCanvasPixels = widthInUnitLengths / unitLengthsPerCanvasPixel / 2;
+    const originYInCanvasPixels = heightInUnitLengths / unitLengthsPerCanvasPixel / 2;
+
+    const widthInCanvasPixels = widthInUnitLengths / unitLengthsPerCanvasPixel;
+    const heightInCanvasPixels = heightInUnitLengths / unitLengthsPerCanvasPixel;
+    const widthInPixels = widthInCanvasPixels * pixelsPerCanvasPixel;
+    const heightInPixels = heightInCanvasPixels * pixelsPerCanvasPixel;
+
+    const layer0 = document.getElementById("layer0");
+    const layer1 = document.getElementById("layer1");
+    const ctx0 = layer0.getContext("2d");
+    const ctx1 = layer1.getContext("2d");
+    let updateLayer1 = true;
+
+    layer0.width = widthInPixels;
+    layer0.height = heightInPixels;
+    layer0.style.border = `${borderWidthInPixels.toString()}px solid white`;
+
+    layer1.width = widthInPixels;
+    layer1.height = heightInPixels;
+    layer1.style.border = `${borderWidthInPixels.toString()}px solid white`;
+
+    for (let i = 0; i < widthInCanvasPixels; i++) {
+        for (let j = 0; j < heightInCanvasPixels; j++) {
+            let real, imag;
+            [real, imag] = canvasPixelToComplex(i, j);
+            let currentReal = 0;
+            let currentImag = 0;
+            let iterations = 0;
+            while (magnitude(currentReal, currentImag) <= maxAcceptibleMagnitude
+                    && iterations < maxIterations) {
+                [currentReal, currentImag] = nextIteration(currentReal, currentImag, real, imag);
+                iterations++;
+            }
+            ctx0.fillStyle = pixelColor(iterations, maxIterations);
+            ctx0.fillRect(pixelsPerCanvasPixel*i, pixelsPerCanvasPixel*j, pixelsPerCanvasPixel, pixelsPerCanvasPixel);
+        }
+    }
+
+    layer1.addEventListener("click", e => {
+        updateLayer1 = !updateLayer1;
+    })
+
+    layer1.addEventListener("mousemove", e => {
+        if (updateLayer1) {
+            ctx1.clearRect(0, 0, widthInPixels, heightInPixels);
+            ctx1.beginPath();
+
+            let real, imag;
+            [real, imag] = pixelToComplex(e.offsetX, e.offsetY);
+            let currentReal = real;
+            let currentImag = imag;
+            let iterations = 1;
+
+            ctx1.moveTo(e.offsetX, e.offsetY);
+            while (magnitude(currentReal, currentImag) <= maxAcceptibleMagnitude
+                    && iterations < maxIterations) {
+                [currentReal, currentImag] = nextIteration(currentReal, currentImag, real, imag);
+                ctx1.lineTo(...complexToPixel(currentReal, currentImag));
+                iterations++;
+            }
+            ctx1.strokeStyle = iterations < maxIterations ? "#f00" : "#0f0";
+            ctx1.stroke();
+        }
+    });
+</script>
+
+</html>

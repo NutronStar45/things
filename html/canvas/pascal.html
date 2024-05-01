@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+
+<body style="background-color: #000;">
+    <canvas id="canvas"></canvas>
+</body>
+
+<script>
+    // h: R (integers are 0deg)
+    // s: [0,1]
+    // v: [0,1]
+    function hsv2rgb(h, s, v) {
+        let shapeBase = n => (6*h + n) % 6;
+        let shape = n => v * (1 - s * Math.max(Math.min(shapeBase(n), 4 - shapeBase(n), 1), 0));
+        return [shape(5), shape(3), shape(1)];
+    }
+
+    function sqrtBigint(n) {
+        if (n < 2n) return n;
+
+        let maxExponent = 1n;
+        let exponent; // floor(ln(n)/ln(2))
+        while (1n << maxExponent < n) {
+            maxExponent <<= 1n;
+        }
+
+        if (1n << maxExponent === n) {
+            exponent = maxExponent;
+        }
+        else {
+            let minExponent = maxExponent >> 1n;
+            while (maxExponent - minExponent > 1n) {
+                let exponentGuess = (minExponent + maxExponent) / 2n;
+                if (1n << exponentGuess < n) {
+                    minExponent = exponentGuess;
+                }
+                else if (n < 1n << exponentGuess) {
+                    maxExponent = exponentGuess;
+                }
+                else {
+                    minExponent = exponentGuess;
+                    break;
+                }
+            }
+            exponent = minExponent;
+        }
+
+        let min = 1n << (exponent / 2n);
+        let max = 1n << (exponent / 2n + 1n);
+
+        if (min ** 2n === n) return min;
+        if (max ** 2n === n) return max;
+        while (max - min > 1n) {
+            let guess = (min + max) / 2n;
+            if (guess ** 2n < n) {
+                min = guess;
+            }
+            else if (n < guess ** 2n) {
+                max = guess;
+            }
+            else {
+                return guess;
+            }
+        }
+
+        return min;
+    }
+
+    function isPerfectSquareBigint(n) {
+        return sqrtBigint(n) ** 2n === n;
+    }
+
+    function pascal(layer, block) {
+        return fallingFactorial(BigInt(layer), BigInt(block)) / factorial(BigInt(block));
+    }
+
+    function fallingFactorial(x, n) {
+        let prod = 1n;
+        for (let i = x-n+1n; i <= x; i++) {
+            prod *= i;
+        }
+        return prod;
+    }
+
+    function factorial(n) {
+        let prod = 1n;
+        for (let i = 1n; i <= n; i++) {
+            prod *= i;
+        }
+        return prod;
+    }
+
+    function blockColor(layer, block) {
+        let num = pascal(layer, block);
+        return "#" + hsv2rgb(0, 0, Number(num % 2n === 0n)).map(val => Math.round(val * 255).toString(16).padStart(2, "0")).join("");
+    }
+
+    const height = 256;
+    const blockSize = 2;
+
+    const canvasSize = blockSize * height;
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.setAttribute("width", canvasSize.toString());
+    canvas.setAttribute("height", canvasSize.toString());
+
+    for (let layer = 0; layer < height; layer++) {
+        for (let block = 0; block < layer + 1; block++) {
+            ctx.fillStyle = blockColor(layer, block);
+            ctx.fillRect(((height-layer-1)/2 + block) * blockSize, layer * blockSize, blockSize, blockSize);
+        }
+    }
+</script>
+
+</html>
