@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+
+<style>
+* {
+    font-size: 16px;
+}
+
+.textbox {
+    margin: 0.2em;
+    border: 1px solid black;
+    padding: 0.2em;
+    width: fit-content;
+}
+
+[disabled] {
+    cursor: not-allowed;
+}
+
+input[type=checkbox] {
+    width: 16px;
+    height: 16px;
+}
+
+ol {
+    margin: 0px;
+    padding-left: 20px;
+}
+</style>
+
+<body>
+    <div id="description" class="textbox"></div>
+    <div class="textbox">
+        選項、按鍵說明：<button id="options-buttons-description-coll-button" class="coll-button" target="options-buttons-description"></button>
+        <div id="options-buttons-description" style="display: none;"></div>
+    </div>
+
+    <label>
+        類型：<select id="type">
+            <option value="integer" selected>範圍內整數</option>
+            <option value="real">範圍內實數</option>
+            <option value="choice">選項</option>
+            <option value="choiceAdvanced">進階選項</option>
+        </select> <br>
+    </label>
+    <label>
+        數量：<input id="amount" type="number" min="1"> <br>
+    </label>
+    <div id="boundary-div">
+        <label>
+            下限：<input id="lower-bound" type="number">
+        </label> <br>
+        <label>
+            上限：<input id="upper-bound" type="number">
+        </label>
+    </div>
+    <div id="precision-div" style="display: none;">
+        精度：<select id="precision-limited">
+            <option value="unlimited" selected>不限</option>
+            <option value="limited">小數點後</option>
+        </select>
+        <input id="precision" type="number" min="0" style="display: none;">
+    </div>
+    <label id="allow-repeat-label">
+        允許重複：<input id="allow-repeat" type="checkbox"> <br>
+    </label>
+    <label>
+        排序：<input id="sort" type="checkbox"> <br>
+    </label>
+    <label id="auto-delete-label" style="display: none;">
+        自動刪除抽出的選項：<input id="auto-delete" type="checkbox"> <br>
+    </label>
+    <div id="autofill-div" style="display: none;">
+        <label>
+            下限：<input id="autofill-lower-bound" type="number">
+        </label>
+        <label>
+            上限：<input id="autofill-upper-bound" type="number">
+        </label>
+        <button id="autofill">填入</button>
+    </div>
+    <label id="choices-separator-label" style="display: none;">
+        選項分隔：<select id="choices-separator">
+            <option value="newline" selected>換行</option>
+            <option value="space">空格</option>
+            <option value="comma">半形逗號</option>
+            <option value="commaSpace">半形逗號+空格</option>
+        </select> <br>
+    </label>
+    <div id="choices-div" style="display: none;">
+        <span id="choices-name">選項：</span><button class="coll-button" target="choices"></button><textarea id="choices" style="vertical-align: text-top;"></textarea> <br>
+    </div>
+    <div id="ignore-choices-div" style="display: none;">
+        排除選項：<button class="coll-button" target="ignore-choices"></button><textarea id="ignore-choices" style="vertical-align: text-top;"></textarea> <br>
+    </div>
+    <div id="apply-choices-div" style="display: none;">
+        <button id="apply-choices">套用</button> <br>
+    </div>
+    <div id="current-choices-div" style="display: none;">
+        目前選項：<button class="coll-button" target="current-choices"></button><textarea id="current-choices" style="vertical-align: text-top;" disabled></textarea> <br>
+    </div>
+    <label id="output-separator-label">
+        生成結果分隔：<select id="output-separator">
+            <option value="newline" selected>換行</option>
+            <option value="space">空格</option>
+            <option value="comma">半形逗號</option>
+            <option value="commaSpace">半形逗號+空格</option>
+        </select> <br>
+    </label>
+
+    <button id="generate">生成</button>
+    <button id="delete-generated" style="display: none;">刪除抽出的選項</button> <br>
+    <div id="output" class="textbox" style="display: none;"></div>
+</body>
+
+<script>
+function checkValid() {
+    if (amountElement.value === "") {
+        alert("數量必須為正整數");
+        return false;
+    }
+    if (!Number.isInteger(+amountElement.value)) {
+        alert("數量必須為正整數");
+        return false;
+    }
+    if (amountElement.value <= 0) {
+        alert("數量必須為正整數");
+        return false;
+    }
+
+    if (typeElement.value === "integer") {
+        if (lowerBoundElement.value === "") {
+            alert("下限必須為整數");
+            return false;
+        }
+        if (!Number.isInteger(+lowerBoundElement.value)) {
+            alert("下限必須為整數");
+            return false;
+        }
+        if (upperBoundElement.value === "") {
+            alert("上限必須為整數");
+            return false;
+        }
+        if (!Number.isInteger(+upperBoundElement.value)) {
+            alert("上限必須為整數");
+            return false;
+        }
+        if (+lowerBoundElement.value > upperBoundElement.value) {
+            alert("下限必須小於等於上限");
+            return false;
+        }
+        if (!allowRepeatElement.checked) {
+            if (upperBoundElement.value - lowerBoundElement.value + 1 < amountElement.value) {
+                alert("數量太大");
+                return false;
+            }
+        }
+    }
+    if (typeElement.value === "real") {
+        if (lowerBoundElement.value === "") {
+            alert("下限必須為實數");
+            return false;
+        }
+        if (upperBoundElement.value === "") {
+            alert("上限必須為實數");
+            return false;
+        }
+        if (+lowerBoundElement.value > upperBoundElement.value) {
+            alert("下限必須小於等於上限");
+            return false;
+        }
+        if (precisionLimitedElement.value === "limited") {
+            if (precisionElement.value === "") {
+                alert("精度必須是非負整數");
+                return false;
+            }
+            if (!Number.isInteger(+precisionElement.value)) {
+                alert("精度必須是非負整數");
+                return false;
+            }
+            if (+precisionElement.value < 0) {
+                alert("精度必須是非負整數");
+                return false;
+            }
+        }
+    }
+    if (typeElement.value === "choice") {
+        if (choicesElement.value === "") {
+            alert("選項必須至少有一個");
+            return false;
+        }
+        if (!allowRepeatElement.checked) {
+            if (choicesElement.value.split(separators[choicesSeparatorElement.value]).filter(value => value !== "").length < amountElement.value) {
+                alert("數量太大");
+                return false;
+            }
+        }
+    }
+    if (typeElement.value === "choiceAdvanced") {
+        if (currentChoicesElement.value === "") {
+            alert("選項必須至少有一個");
+            return false;
+        }
+        if (!allowRepeatElement.checked) {
+            if (currentChoicesElement.value.split(separators[choicesSeparatorElement.value]).filter(value => value !== "").length < amountElement.value) {
+                alert("數量太大");
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+function autofillCheckValid() {
+    if (autofillLowerBoundElement.value === "") {
+        alert("下限必須為整數");
+        return false;
+    }
+    if (!Number.isInteger(+autofillLowerBoundElement.value)) {
+        alert("下限必須為整數");
+        return false;
+    }
+    if (autofillUpperBoundElement.value === "") {
+        alert("上限必須為整數");
+        return false;
+    }
+    if (!Number.isInteger(+autofillUpperBoundElement.value)) {
+        alert("上限必須為整數");
+        return false;
+    }
+    if (+autofillLowerBoundElement.value > autofillUpperBoundElement.value) {
+        alert("下限必須小於等於上限");
+        return false;
+    }
+    return true;
+}
+
+function randomIndices(range, amount, allowRepeat, sort) {
+    let result = [];
+    if (allowRepeat) {
+        for (let i = 0; i < amount; i++) {
+            result.push(Math.floor(Math.random() * range));
+        }
+    }
+    else {
+        let sortedIndices = [];
+        for (let i = 0; i < amount; i++) {
+            let rawGeneratedIndex = Math.floor(Math.random() * range);
+            let generatedIndex;
+            for (let j = 0; j <= sortedIndices.length; j++) {
+                if (j === sortedIndices.length || (rawGeneratedIndex + j < sortedIndices[j])) {
+                    generatedIndex = rawGeneratedIndex + j;
+                    break;
+                }
+            }
+            result.push(generatedIndex);
+            let insertIndex = sortedIndices.findIndex(value => value > generatedIndex);
+            sortedIndices.splice(insertIndex >= 0 ? insertIndex : sortedIndices.length, 0, generatedIndex);
+            range--;
+        }
+    }
+    if (sort) {
+        result.sort((a, b) => a - b);
+    }
+    return result;
+}
+
+function deleteGenerated() {
+    let currentChoices = currentChoicesElement.value.split(separators[choicesSeparatorElement.value]);
+    let newCurrentChoices = currentChoices.filter((value, index) => {
+        return !generatedIndices.includes(index);
+    });
+    currentChoicesElement.value = newCurrentChoices.join(separators[choicesSeparatorElement.value]);
+    deleteGeneratedElement.disabled = true;
+}
+
+const descriptions = {
+    integer: "隨機抽出一個或多個範圍內的整數，包含下限與上限",
+    real: "隨機抽出一個或多個範圍內的浮點數，包含下限，不包含上限",
+    choice: "從提供的選項中隨機抽出一個或多個選項，選項間用換行區隔",
+    choiceAdvanced: "<ol><li>手動或自動填入選項模板（選項間用換行區隔）</li><li>按套用把選項模板和排除選項套用到目前選項</li><li>按生成從目前選項中隨機抽出一個或多個選項</li><li>可以將抽出的選項從目前選項中手動或自動刪除</li></ol>"
+};
+const optionsButtonsDescriptions = {
+    integer: "數量：抽出整數的數量<br>下限：最小可能抽出的整數<br>上限：最大可能抽出的整數<br>允許重複：可以多次抽出同個整數<br>排序：排序生成結果<br>生成結果分隔：如何分隔生成結果<br>生成：抽出一個或多個範圍內的整數",
+    real: "數量：抽出實數的數量<br>下限：抽取範圍的下限（含）<br>上限：抽取範圍的上限（不含）<br>精度：無條件捨去到多少位數，0 是到個位<br>排序：排序生成結果<br>生成結果分隔：如何分隔生成結果<br>生成：抽出一個或多個範圍內的實數",
+    choice: "數量：抽出選項的數量<br>允許重複：可以多次抽出同個選項<br>排序：排序生成結果<br>選項分隔：如何分隔選項<br>選項：可以抽出的選項，分隔方式由選項分隔決定<br>生成結果分隔：如何分隔生成結果<br>生成：抽出一個或多個選項",
+    choiceAdvanced: "數量：抽出選項的數量<br>允許重複：可以多次抽出同個選項<br>排序：排序生成結果<br>自動刪除抽出的選項：抽出的選項會從目前選項中刪除<br>（自動填入）下限：自動填入最小<br>（自動填入）上限：自動填入最大<br>填入：把在範圍內的整數填進選項模板中<br>選項分隔：如何分隔選項<br>選項模板：可以套用到目前選項的模板，分隔方式由選項分隔決定<br>排除選項：選項模板套用到目前選項時不套用，分隔方式由選項分隔決定<br>套用：把選項模板套用到目前選項<br>目前選項：抽取的範圍，按套用更改，可以將抽出的選項從目前選項中手動或自動刪除，分隔方式由選項分隔決定<br>生成結果分隔：如何分隔生成結果<br>生成：抽出一個或多個目前選項中的選項<br>刪除抽出的選項：從目前選項中刪除抽出的選項，目前選項若有重複則只刪除抽出的"
+};
+const separators = {
+    newline: "\n",
+    space: " ",
+    comma: ",",
+    commaSpace: ", "
+};
+
+const descriptionElement = document.getElementById("description");
+const optionsButtonsDescriptionCollButtonElement = document.getElementById("options-buttons-description-coll-button");
+const optionsButtonsDescriptionElement = document.getElementById("options-buttons-description");
+const typeElement = document.getElementById("type");
+const amountElement = document.getElementById("amount");
+const boundaryDivElement = document.getElementById("boundary-div");
+const lowerBoundElement = document.getElementById("lower-bound");
+const upperBoundElement = document.getElementById("upper-bound");
+const precisionDivElement = document.getElementById("precision-div");
+const precisionLimitedElement = document.getElementById("precision-limited");
+const precisionElement = document.getElementById("precision");
+const allowRepeatLabelElement = document.getElementById("allow-repeat-label");
+const allowRepeatElement = document.getElementById("allow-repeat");
+const sortElement = document.getElementById("sort");
+const autoDeleteLabelElement = document.getElementById("auto-delete-label");
+const autoDeleteElement = document.getElementById("auto-delete");
+const autofillDivElement = document.getElementById("autofill-div");
+const autofillLowerBoundElement = document.getElementById("autofill-lower-bound");
+const autofillUpperBoundElement = document.getElementById("autofill-upper-bound");
+const autofillElement = document.getElementById("autofill");
+const choicesSeparatorLabelElement = document.getElementById("choices-separator-label");
+const choicesSeparatorElement = document.getElementById("choices-separator");
+const choicesDivElement = document.getElementById("choices-div");
+const choicesNameElement = document.getElementById("choices-name");
+const choicesElement = document.getElementById("choices");
+const ignoreChoicesDivElement = document.getElementById("ignore-choices-div");
+const ignoreChoicesElement = document.getElementById("ignore-choices");
+const applyChoicesDivElement = document.getElementById("apply-choices-div");
+const applyChoicesElement = document.getElementById("apply-choices");
+const currentChoicesDivElement = document.getElementById("current-choices-div");
+const currentChoicesElement = document.getElementById("current-choices");
+const outputSeparatorLabelElement = document.getElementById("output-separator-label");
+const outputSeparatorElement = document.getElementById("output-separator");
+const generateElement = document.getElementById("generate");
+const deleteGeneratedElement = document.getElementById("delete-generated");
+const outputElement = document.getElementById("output");
+
+let generatedIndices;
+
+descriptionElement.innerHTML = descriptions.integer;
+optionsButtonsDescriptionElement.innerHTML = optionsButtonsDescriptions.integer;
+typeElement.value = "integer";
+amountElement.value = "1";
+lowerBoundElement.value = "1";
+upperBoundElement.value = "10";
+precisionLimitedElement.value = "unlimited";
+precisionElement.value = "";
+allowRepeatElement.checked = false;
+sortElement.checked = false;
+autoDeleteElement.checked = false;
+autofillLowerBoundElement.value = "";
+autofillUpperBoundElement.value = "";
+choicesSeparatorElement.value = "newline";
+choicesElement.value = "";
+ignoreChoicesElement.value = "";
+currentChoicesElement.value = "";
+outputSeparatorElement.value = "newline";
+outputElement.innerText = "";
+
+for (let element of document.getElementsByClassName("coll-button")) {
+    if (document.getElementById(element.getAttribute("target")).style.display === "") {
+        element.innerHTML = "摺疊";
+    }
+    else {
+        element.innerHTML = "展開";
+    }
+    element.addEventListener("click", () => {
+        let collElement = document.getElementById(element.getAttribute("target"));
+        if (collElement.style.display === "") {
+            collElement.style.display = "none";
+            element.innerHTML = "展開";
+        }
+        else {
+            collElement.style.display = "";
+            element.innerHTML = "摺疊";
+        }
+    });
+}   
+
+typeElement.addEventListener("change", function() {
+    if (this.value === "integer") {
+        boundaryDivElement.style.display = "";
+        precisionDivElement.style.display = "none";
+        allowRepeatLabelElement.style.display = "";
+        autoDeleteLabelElement.style.display = "none";
+        autofillDivElement.style.display = "none";
+        choicesSeparatorLabelElement.style.display = "none";
+        choicesDivElement.style.display = "none";
+        ignoreChoicesDivElement.style.display = "none";
+        applyChoicesDivElement.style.display = "none";
+        currentChoicesDivElement.style.display = "none";
+        deleteGeneratedElement.style.display = "none";
+    }
+    else if (this.value === "real") {
+        boundaryDivElement.style.display = "";
+        precisionDivElement.style.display = "";
+        allowRepeatLabelElement.style.display = "none";
+        autoDeleteLabelElement.style.display = "none";
+        autofillDivElement.style.display = "none";
+        choicesSeparatorLabelElement.style.display = "none";
+        choicesDivElement.style.display = "none";
+        ignoreChoicesDivElement.style.display = "none";
+        applyChoicesDivElement.style.display = "none";
+        currentChoicesDivElement.style.display = "none";
+        deleteGeneratedElement.style.display = "none";
+    }
+    else if (this.value === "choice") {
+        boundaryDivElement.style.display = "none";
+        precisionDivElement.style.display = "none";
+        allowRepeatLabelElement.style.display = "";
+        autoDeleteLabelElement.style.display = "none";
+        autofillDivElement.style.display = "none";
+        choicesSeparatorLabelElement.style.display = "";
+        choicesDivElement.style.display = "";
+        ignoreChoicesDivElement.style.display = "none";
+        applyChoicesDivElement.style.display = "none";
+        currentChoicesDivElement.style.display = "none";
+        deleteGeneratedElement.style.display = "none";
+        choicesNameElement.innerHTML = "選項：";
+    }
+    else if (this.value === "choiceAdvanced") {
+        boundaryDivElement.style.display = "none";
+        precisionDivElement.style.display = "none";
+        allowRepeatLabelElement.style.display = "";
+        autoDeleteLabelElement.style.display = "";
+        autofillDivElement.style.display = "";
+        choicesSeparatorLabelElement.style.display = "";
+        choicesDivElement.style.display = "";
+        ignoreChoicesDivElement.style.display = "";
+        applyChoicesDivElement.style.display = "";
+        currentChoicesDivElement.style.display = "";
+        deleteGeneratedElement.style.display = "";
+        choicesNameElement.innerHTML = "選項模板：";
+        deleteGeneratedElement.disabled = true;
+    }
+
+    descriptionElement.innerHTML = descriptions[this.value];
+    optionsButtonsDescriptionCollButtonElement.innerHTML = "展開";
+    optionsButtonsDescriptionElement.innerHTML = optionsButtonsDescriptions[this.value];
+    optionsButtonsDescriptionElement.style.display = "none";
+});
+
+precisionLimitedElement.addEventListener("change", function() {
+    if (this.value === "unlimited") {
+        precisionElement.style.display = "none";
+    }
+    else {
+        precisionElement.style.display = "";
+    }
+});
+
+autofillElement.addEventListener("click", () => {
+    if (autofillCheckValid()) {
+        let result = [];
+        let lowerBound = +autofillLowerBoundElement.value;
+        let upperBound = +autofillUpperBoundElement.value;
+        for (let i = 0; i <= upperBound - lowerBound; i++) {
+            result.push(i + lowerBound);
+        }
+        choicesElement.value = result.join(separators[choicesSeparatorElement.value]);
+    }
+});
+
+applyChoicesElement.addEventListener("click", () => {
+    let ignoreChoices = ignoreChoicesElement.value.split(separators[choicesSeparatorElement.value]);
+    currentChoicesElement.value = choicesElement.value.split(separators[choicesSeparatorElement.value]).filter(
+        value => value !== "" && !ignoreChoices.includes(value)
+    ).join(separators[choicesSeparatorElement.value]);
+    deleteGeneratedElement.disabled = true;
+});
+
+generateElement.addEventListener("click", () => {
+    if (checkValid()) {
+        let type = typeElement.value;
+        let amount = +amountElement.value;
+        let lowerBound = +lowerBoundElement.value;
+        let upperBound = +upperBoundElement.value;
+        let precisionLimited = precisionLimitedElement.value === "limited";
+        let precision = +precisionElement.value;
+        let allowRepeat = allowRepeatElement.checked;
+        let sort = sortElement.checked;
+        let autoDelete = autoDeleteElement.checked;
+        let choices = choicesElement.value;
+        let currentChoices = currentChoicesElement.value;
+        let outputSeparator = outputSeparatorElement.value;
+
+        let result = [];
+        if (type === "integer") {
+            let range = upperBound - lowerBound + 1;
+            result = randomIndices(range, amount, allowRepeat, sort).map(value => value + lowerBound);
+        }
+        else if (type === "real") {
+            if (precisionLimited) {
+                for (let i = 0; i < amount; i++) {
+                    result.push(Math.floor((Math.random() * (upperBound - lowerBound) + lowerBound) * 10**precision) / 10**precision);
+                }
+            }
+            else {
+                for (let i = 0; i < amount; i++) {
+                    result.push(Math.random() * (upperBound - lowerBound) + lowerBound);
+                }
+            }
+            if (sort) {
+                result.sort((a, b) => a - b);
+            }
+        }
+        else if (type === "choice") {
+            let choicesArray = choices.split(separators[choicesSeparatorElement.value]).filter(value => value !== "");
+            result = randomIndices(choicesArray.length, amount, allowRepeat, sort).map(value => choicesArray[value]);
+        }
+        else if (type === "choiceAdvanced") {
+            let choicesArray = currentChoices.split(separators[choicesSeparatorElement.value]).filter(value => value !== "");
+            let resultIndices = randomIndices(choicesArray.length, amount, allowRepeat, sort);
+            generatedIndices = resultIndices.filter((value, index, array) => {
+                return array.indexOf(value) === index;
+            });
+            result = resultIndices.map(value => choicesArray[value]);
+            if (autoDelete) {
+                deleteGenerated();
+            }
+            else {
+                deleteGeneratedElement.disabled = false;
+            }
+        }
+
+        outputElement.innerText = result.join(separators[outputSeparator]);
+        outputElement.style.display = "";
+    }
+});
+
+deleteGeneratedElement.addEventListener("click", deleteGenerated);
+</script>
+
+</html>

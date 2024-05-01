@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html>
+
+<style>
+* {
+    font-size: 16px;
+}
+
+body > div:not(:first-child) {
+    margin-top: 2em;
+}
+</style>
+
+<body>
+    <div>
+        <label>
+            <input id="overwrite" type="checkbox" checked> Overwrite self
+        </label>
+    </div>
+    <div>
+        Text <button id="from-text">Convert from text</button> <br>
+        <textarea rows="4" cols="50" id="text"></textarea>
+    </div>
+    <div>
+        UTF-8 <button id="from-utf8">Convert from UTF-8</button> <br>
+        <textarea rows="4" cols="50" id="utf8"></textarea> <br>
+        UTF-8 Binary <button id="from-utf8-bin">Convert from UTF-8 Binary</button> <br>
+        <textarea rows="4" cols="50" id="utf8-bin"></textarea> <br>
+        <label>
+            Separator: <select id="utf8-sep">
+                <option value="none">None</option>
+                <option value="space" selected>Space</option>
+            </select>
+        </label> <br>
+        <label>
+            Prefix: <select id="utf8-prefix">
+                <option value="none" selected>None</option>
+                <option value="percent">%</option>
+            </select>
+        </label> <br>
+        <label>
+            Case: <select id="utf8-case">
+                <option value="upper" selected>Upper case</option>
+                <option value="lower">Lower case</option>
+            </select>
+        </label>
+    </div>
+    <div>
+        UTF-16 <button id="from-utf16">Convert from UTF-16</button> <br>
+        <textarea rows="4" cols="50" id="utf16"></textarea> <br>
+        UTF-16 Binary <button id="from-utf16-bin">Convert from UTF-16 Binary</button> <br>
+        <textarea rows="4" cols="50" id="utf16-bin"></textarea> <br>
+        <label>
+            Separator: <select id="utf16-sep">
+                <option value="none">None</option>
+                <option value="space" selected>Space</option>
+            </select>
+        </label> <br>
+        <label>
+            Prefix: <select id="utf16-prefix">
+                <option value="none" selected>None</option>
+                <option value="backslash-u">\u</option>
+                <option value="u-plus">U+</option>
+            </select>
+        </label> <br>
+        <label>
+            Case: <select id="utf16-case">
+                <option value="upper" selected>Upper case</option>
+                <option value="lower">Lower case</option>
+            </select>
+        </label>
+    </div>
+    <div>
+        UTF-32 <button id="from-utf32">Convert from UTF-32</button> <br>
+        <textarea rows="4" cols="50" id="utf32"></textarea> <br>
+        UTF-32 Binary <button id="from-utf32-bin">Convert from UTF-32 Binary</button> <br>
+        <textarea rows="4" cols="50" id="utf32-bin"></textarea> <br>
+        <label>
+            Separator: <select id="utf32-sep">
+                <option value="none">None</option>
+                <option value="space" selected>Space</option>
+            </select>
+        </label> <br>
+        <label>
+            Prefix: <select id="utf32-prefix">
+                <option value="none" selected>None</option>
+                <option value="u-plus">U+</option>
+            </select>
+        </label> <br>
+        <label>
+            Case: <select id="utf32-case">
+                <option value="upper" selected>Upper case</option>
+                <option value="lower">Lower case</option>
+            </select>
+        </label>
+    </div>
+    <div>
+        HTML Entity <br>
+        <textarea rows="4" cols="50" id="html-entity"></textarea> <br>
+        <label>
+            Case: <select id="html-entity-case">
+                <option value="upper" selected>Upper case</option>
+                <option value="lower">Lower case</option>
+            </select>
+        </label> <br>
+        <label>
+            Length: <select id="html-entity-length">
+                <option value="one">1, 2, 3, 4, 5, 6</option>
+                <option value="two">2, 3, 4, 5, 6</option>
+                <option value="two-four" selected>2, 4, 5, 6</option>
+                <option value="four">4, 5, 6</option>
+            </select>
+        </label>
+    </div>
+</body>
+
+<script>
+const validHexDigits = "0123456789ABCDEFabcdef";
+const prefix = {
+    "none": "",
+    "backslash-u": "\\u",
+    "u-plus": "U+",
+    "percent": "%",
+}
+const sep = {
+    "none": "",
+    "space": " "
+};
+
+function validateUTF16Codes(utf16Codes, utf16Index) {
+    // check for lone surrogates
+    // types of lone surrogates include
+    //     starting low surrogate
+    //     low surrogate not following a high surrogate
+    //     ending high surrogate
+    //     high surrogate not followed by a low surrogate
+    for (let i=0; i<utf16Codes.length; i++) {
+        // character is a low surrogate
+        if (utf16Codes[i] >= 0xDC00 && utf16Codes[i] <= 0xDFFF) {
+            // starting low surrogate
+            if (i === 0) {
+                alert(`Lone low surrogate ${utf16Codes[i].toString(16).toUpperCase()} at ${utf16Index[i]}`);
+                return false
+            }
+            // previous character is not a high surrogate
+            if (utf16Codes[i-1] < 0xD800 || utf16Codes[i-1] > 0xDFFF) {
+                alert(`Lone low surrogate ${utf16Codes[i].toString(16).toUpperCase()} at ${utf16Index[i]}`);
+                return false;
+            }
+        }
+        // character is not a low surrogate
+        else {
+            // character is a high surrogate
+            if (utf16Codes[i] >= 0xD800 && utf16Codes[i] <= 0xDBFF) {
+                // ending high surrogate
+                if (i === utf16Codes.length - 1) {
+                    alert(`Lone high surrogate ${utf16Codes[i].toString(16).toUpperCase()} at ${utf16Index[i]}`);
+                    return false;
+                }
+            }
+            if (i > 0) {
+                // previous character is a high surrogate
+                if (utf16Codes[i-1] >= 0xD800 && utf16Codes[i-1] <= 0xDBFF) {
+                    alert(`Lone high surrogate ${utf16Codes[i-1].toString(16).toUpperCase()} at ${utf16Index[i-1]}`);
+                    return false;
+                }
+            }
+        }
+    }
+    
+    return true;
+}
+function hexToBin(hex) {
+    let bin = "";
+    for (let i=0; i<hex.length; i++) {
+        if (validHexDigits.includes(hex[i])) {
+            bin += parseInt(hex[i], 16).toString(2).padStart(4, "0");
+        }
+        else if (hex[i] === " " || hex[i] === "\n") {
+            bin += hex[i];
+        }
+    }
+
+    return bin;
+}
+function binToHex(bin) {
+    // check for invalid characters
+    for (let i=0; i<bin.length; i++) {
+        if (!"01 ".includes(bin[i])) {
+            alert(`Invalid character ${bin[i]} at ${i}`);
+            return null;
+        }
+    }
+    // get hex
+    let hexIndex = [];
+    let hexCodes = [];
+    let currentDigits = [];
+    for (let i=0; i<bin.length; i++) {
+        // character is a digit
+        if (bin[i] !== " ") {
+            // get hex location
+            if (currentDigits.length === 0) {
+                hexIndex.push(i);
+            }
+            currentDigits.push(+bin[i]);
+        }
+        // combine currentDigits into hex
+        if (currentDigits.length === 4) {
+            hexCodes.push(8 * currentDigits[0] + 4 * currentDigits[1] + 2 * currentDigits[2] + currentDigits[3]);
+            currentDigits = [];
+        }
+    }
+    // not enough digits for a hex digit
+    if (currentDigits.length > 0) {
+        alert(`Not enough digits for a hex digit (${currentDigits.length})`);
+        return null;
+    }
+
+    return hexCodes.map(code => code.toString(16)).join("");
+}
+function textToUTF16Codes(text) {
+    // get UTF-16 codes
+    let utf16Codes = [];
+    for (let i=0; i<text.length; i++) {
+        utf16Codes.push(text.charCodeAt(i));
+    }
+    return utf16Codes;
+}
+function utf8ToUTF16Codes(utf8, utf8Index=null) {
+    let indexProvided = utf8Index !== undefined && utf8Index !== null;
+    // check if utf8Index is not an array
+    if (indexProvided && !Array.isArray(utf8Index)) {
+        alert(`utf8Index is not an array`);
+        return null;
+    }
+    utf8 = utf8.toUpperCase();
+    // get UTF-8 codes
+    if (!indexProvided) utf8Index = [];
+    let utf8Codes = [];
+    let currentDigits = [];
+    for (let i=0; i<utf8.length; i++) {
+        // character is a digit
+        if (validHexDigits.includes(utf8[i])) {
+            // get UTF-8 character location
+            if (currentDigits.length === 0 && !indexProvided) {
+                utf8Index.push(i);
+            }
+            currentDigits.push(parseInt(utf8[i], 16));
+        }
+        // combine currentDigits into code
+        if (currentDigits.length === 2) {
+            utf8Codes.push(16 * currentDigits[0] + currentDigits[1]);
+            currentDigits = [];
+        }
+    }
+    // not enough digits for a character
+    if (currentDigits.length > 0) {
+        alert(`Not enough digits for a character (${currentDigits.length})`);
+        return null;
+    }
+    // check if lengths match
+    if (utf8Codes.length !== utf8Index.length) {
+        alert(`Lengths of utf8Codes and utf8Index do not match`);
+        return null;
+    }
+    // get UTF-16 codes
+    let utf16Codes = [];
+    let currentCharacterIndex = -1;
+    let currentCharacter = [];
+    for (let i=0; i<utf8Codes.length; i++) {
+        // 0XXXXXXX (ASCII, 0x0000 - 0x007F)
+        if (utf8Codes[i] <= 0x7F) {
+            // after an incomplete character
+            if (i > 0 && currentCharacter.length > 0) {
+                alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                return null;
+            }
+
+            currentCharacter.push(utf8Codes[i]);
+            currentCharacterIndex = utf8Index[i];
+        }
+
+        // 10XXXXXX (continuation)
+        else if (utf8Codes[i] <= 0xBF) {
+            // starting continuation
+            // || after a complete character
+            if (currentCharacter.length === 0) {
+                alert(`Lone continuation ${utf8Codes[i].toString(16).toUpperCase()} at ${i}`);
+                return null;
+            }
+
+            currentCharacter.push(utf8Codes[i]);
+        }
+
+        // 110XXXXX (2-byte combination, 0x0080 - 0x07FF)
+        else if (utf8Codes[i] <= 0xDF) {
+            // after an incomplete character
+            if (currentCharacter.length > 0) {
+                alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                return null;
+            }
+
+            currentCharacter.push(utf8Codes[i]);
+            currentCharacterIndex = utf8Index[i];
+        }
+
+        // 1110XXXX (3-byte combination, 0x0800 - 0xFFFF)
+        else if (utf8Codes[i] <= 0xEF) {
+            // after an incomplete character
+            if (currentCharacter.length > 0) {
+                alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                return null;
+            }
+
+            currentCharacter.push(utf8Codes[i]);
+            currentCharacterIndex = utf8Index[i];
+        }
+
+        // 11110XXX (4-byte combination, 0x10000 - 0x10FFFF)
+        else if (utf8Codes[i] <= 0xF7) {
+            // after an incomplete character
+            if (currentCharacter.length > 0) {
+                alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                return null;
+            }
+
+            currentCharacter.push(utf8Codes[i]);
+            currentCharacterIndex = utf8Index[i];
+        }
+
+        // 11111XXX (invalid)
+        else {
+            alert(`Invalid byte ${utf8Codes[i]} at ${i}`);
+            return null;
+        }
+
+        // check for complete character
+        if (currentCharacter.length > 0) {
+            // 0XXXXXXX (ASCII, 0x0000 - 0x007F)
+            if (currentCharacter[0] <= 0x7F) {
+                utf16Codes.push(currentCharacter[0]);
+                currentCharacter = [];
+            }
+
+            // 110XXXXX 10XXXXXX (2-byte combination, 0x0080 - 0x07FF)
+            else if (currentCharacter[0] <= 0xDF && currentCharacter.length === 2) {
+                let firstByte = (currentCharacter[0] & 0x1F) >> 2;
+                let secondByte = ((currentCharacter[0] & 0x03) << 6) + (currentCharacter[1] & 0x3F);
+
+                // 0x0000 - 0x007F
+                if (firstByte === 0x00 && secondByte < 0x80) {
+                    alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                    return null;
+                }
+
+                utf16Codes.push((firstByte << 8) + secondByte);
+                currentCharacter = [];
+            }
+
+            // 1110XXXX 10XXXXXX 10XXXXXX (3-byte combination, 0x0800 - 0xFFFF)
+            else if (currentCharacter[0] <= 0xEF && currentCharacter.length === 3) {
+                let firstByte = ((currentCharacter[0] & 0x0F) << 4) + ((currentCharacter[1] & 0x3C) >> 2);
+                let secondByte = ((currentCharacter[1] & 0x03) << 6) + (currentCharacter[2] & 0x3F);
+
+                // 0x0000 - 0x07FF
+                if (firstByte < 0x08) {
+                    alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                    return null;
+                }
+
+                // 0xD800 - 0xDFFF
+                if (firstByte >= 0xD8 && firstByte <= 0xDF) {
+                    alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                    return null;
+                }
+
+                utf16Codes.push((firstByte << 8) + secondByte);
+                currentCharacter = [];
+            }
+
+            // 11110XXX 10XXXXXX 10XXXXXX 10XXXXXX (4-byte combination, 0x10000 - 0x10FFFF)
+            else if (currentCharacter.length === 4) {
+                let firstByte = ((currentCharacter[0] & 0x07) << 2) + ((currentCharacter[1] & 0x3F) >> 4);
+                let secondByte = ((currentCharacter[1] & 0x0F) << 4) + ((currentCharacter[2] & 0x3F) >> 2);
+                let thirdByte = ((currentCharacter[2] & 0x03) << 6) + (currentCharacter[3] & 0x3F);
+
+                // 0x0000 - 0xFFFF
+                if (firstByte === 0) {
+                    alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                    return null;
+                }
+
+                // 0x110000 - 0x1FFFFF
+                if (firstByte > 16) {
+                    alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+                    return null;
+                }
+
+                utf16Codes.push(0xD800 + ((firstByte - 1) << 6) + (secondByte >> 2));
+                utf16Codes.push(0xDC00 + ((secondByte & 0x03) << 8) + thirdByte);
+                currentCharacter = [];
+            }
+        }
+    }
+
+    // incomplete byte sequence
+    if (currentCharacter.length > 0) {
+        alert(`Invalid byte sequence ${currentCharacter.map(code => code.toString(16).toUpperCase().padStart(2, "0")).join("")} at ${currentCharacterIndex}`);
+        return null;
+    }
+
+    return utf16Codes;
+}
+function utf16ToUTF16Codes(utf16, utf16Index=null) {
+    let indexProvided = utf16Index !== undefined && utf16Index !== null;
+    // check if utf16Index is not an array
+    if (indexProvided && !Array.isArray(utf16Index)) {
+        alert(`utf16Index is not an array`);
+        return null;
+    }
+    utf16 = utf16.toUpperCase();
+    // get UTF-16 codes
+    if (!indexProvided) utf16Index = [];
+    let utf16Codes = [];
+    let currentDigits = [];
+    for (let i=0; i<utf16.length; i++) {
+        // character is a digit
+        if (validHexDigits.includes(utf16[i])) {
+            // get UTF-16 character location
+            if (currentDigits.length === 0 && !indexProvided) {
+                utf16Index.push(i);
+            }
+            currentDigits.push(parseInt(utf16[i], 16));
+        }
+        // combine currentDigits into code
+        if (currentDigits.length === 4) {
+            utf16Codes.push((currentDigits[0] << 12) + (currentDigits[1] << 8) + (currentDigits[2] << 4) + currentDigits[3]);
+            currentDigits = [];
+        }
+    }
+    // not enough digits for a character
+    if (currentDigits.length > 0) {
+        alert(`Not enough digits for a character/surrogate (${currentDigits.length})`);
+        return null;
+    }
+    // check if lengths match
+    if (utf16Codes.length !== utf16Index.length) {
+        alert(`Lengths of utf16Codes and utf16Index do not match`);
+        return null;
+    }
+
+    if (!validateUTF16Codes(utf16Codes, utf16Index)) return null;
+
+    return utf16Codes;
+}
+function utf32ToUTF16Codes(utf32, utf32Index=null) {
+    let indexProvided = utf32Index !== undefined && utf32Index !== null;
+    // check if utf16Index is not an array
+    if (indexProvided && !Array.isArray(utf16Index)) {
+        alert(`utf16Index is not an array`);
+        return null;
+    }
+    utf32 = utf32.toUpperCase();
+    // get UTF-32 codes (split into 2 groups of 16 bits)
+    if (!indexProvided) utf32Index = [];
+    let utf32Codes = [];
+    let currentDigits = [];
+    for (let i=0; i<utf32.length; i++) {
+        // character is a digit
+        if (validHexDigits.includes(utf32[i])) {
+            if (currentDigits.length === 0 && !indexProvided) {
+                utf32Index.push(i);
+            }
+            currentDigits.push(parseInt(utf32[i], 16));
+        }
+        // combine currentDigits into code
+        if (currentDigits.length === 8) {
+            utf32Codes.push([(currentDigits[0] << 12) + (currentDigits[1] << 8) + (currentDigits[2] << 4) + currentDigits[3], (currentDigits[4] << 12) + (currentDigits[5] << 8) + (currentDigits[6] << 4) + currentDigits[7]]);
+            currentDigits = [];
+        }
+    }
+    // not enough digits for a character
+    if (currentDigits.length > 0) {
+        alert(`Not enough digits for a character (${currentDigits.length})`);
+        return null;
+    }
+    // check if lengths match
+    if (utf32Codes.length !== utf32Index.length) {
+        alert(`Lengths of utf32Codes and utf32Index do not match`);
+        return null;
+    }
+    // get UTF-16 codes
+    let utf16Codes = [];
+    for (let i=0; i<utf32Codes.length; i++) {
+        // characters outside valid range
+        if (utf32Codes[i][0] > 16) {
+            alert(`Out of range character ${utf32Codes[i][0].toString(16).toUpperCase().padStart(4, "0") + utf32Codes[i][1].toString(16).toUpperCase().padStart(4, "0")} at ${utf32Index[i]}`);
+            return null;
+        }
+
+        // characters outside BMP
+        if (utf32Codes[i][0] > 0) {
+            let firstPart = ((utf32Codes[i][0] - 1) << 6) + (utf32Codes[i][1] >> 10);
+            let secondPart = utf32Codes[i][1] & 0x03FF;
+            utf16Codes.push(0xD800 + firstPart, 0xDC00 + secondPart);
+        }
+
+        // BMP characters
+        else {
+            // character is a surrogate
+            if (utf32Codes[i][1] >= 0xD800 && utf32Codes[i][1] <= 0xDFFF) {
+                alert(`Surrogate 0000${utf32Codes[i][1].toString(16).toUpperCase().padStart(4, "0")} at ${utf32Index[i]}`);
+                return null;
+            }
+
+            // character is not a surrogate
+            utf16Codes.push(utf32Codes[i][1]);
+        }
+    }
+
+    return utf16Codes;
+}
+function utf16CodesToText(utf16Codes) {
+    let text = String.fromCharCode(...utf16Codes);
+    return text;
+}
+function utf16CodesToUTF8(utf16Codes, sep="", prefix="", upper=true) {
+    // get UTF-8 codes
+    let utf8Codes = [];
+    for (let i=0; i<utf16Codes.length; i++) {
+        // 11110XXX 10XXXXXX 10XXXXXX 10XXXXXX (4-byte combination, 0x10000 - 0x10FFFF)
+        if (utf16Codes[i] >= 0xD800 && utf16Codes[i] <= 0xDFFF) {
+            if (utf16Codes[i] >= 0xDC00) {
+                let firstByte = ((utf16Codes[i-1] & 0x03FF) >> 6) + 1;
+                let secondByte = ((utf16Codes[i-1] & 0x003F) << 2) + ((utf16Codes[i] & 0x03FF) >> 8);
+                let thirdByte = utf16Codes[i] & 0x00FF;
+
+                utf8Codes.push(0xF0 + (firstByte >> 2));
+                utf8Codes.push(0x80 + ((firstByte & 0x03) << 4) + (secondByte >> 4));
+                utf8Codes.push(0x80 + ((secondByte & 0x0F) << 2) + (thirdByte >> 6));
+                utf8Codes.push(0x80 + (thirdByte & 0x3F));
+            }
+        }
+
+        // 0XXXXXXX (ASCII, 0x0000 - 0x007F)
+        else if (utf16Codes[i] <= 0x007F) {
+            utf8Codes.push(utf16Codes[i]);
+        }
+        
+        // 110XXXXX 10XXXXXX (2-byte combination, 0x0080 - 0x07FF)
+        else if (utf16Codes[i] <= 0x07FF) {
+            let firstByte = utf16Codes[i] >> 8;
+            let secondByte = utf16Codes[i] & 0x00FF;
+
+            utf8Codes.push(0xC0 + (firstByte << 2) + (secondByte >> 6));
+            utf8Codes.push(0x80 + (secondByte & 0x3F));
+        }
+
+        // 1110XXXX 10XXXXXX 10XXXXXX (3-byte combination, 0x0800 - 0xFFFF)
+        else {
+            let firstByte = utf16Codes[i] >> 8;
+            let secondByte = utf16Codes[i] & 0x00FF;
+
+            utf8Codes.push(0xE0 + (firstByte >> 4));
+            utf8Codes.push(0x80 + ((firstByte & 0x0F) << 2) + (secondByte >> 6));
+            utf8Codes.push(0x80 + (secondByte & 0x3F));
+        }
+    }
+
+    if (upper) {
+        return utf8Codes.map(code => prefix + code.toString(16).toUpperCase().padStart(2, "0")).join(sep);
+    }
+    else {
+        return utf8Codes.map(code => prefix + code.toString(16).toLowerCase().padStart(2, "0")).join(sep);
+    }
+}
+function utf16CodesToUTF16(utf16Codes, sep="", prefix="", upper=true) {
+    if (upper) {
+        return utf16Codes.map(code => prefix + code.toString(16).toUpperCase().padStart(4, "0")).join(sep);
+    }
+    else {
+        return utf16Codes.map(code => prefix + code.toString(16).toLowerCase().padStart(4, "0")).join(sep);
+    }
+}
+// separated to two groups of two bytes
+function utf16CodesToUTF32Codes(utf16Codes) {
+    // get UTF-32 codes
+    let utf32Codes = [];
+    for (let i=0; i<utf16Codes.length; i++) {
+        // character is a low surrogate
+        if (utf16Codes[i] >= 0xDC00 && utf16Codes[i] <= 0xDFFF) {
+            let firstPart = utf16Codes[i-1] & 0x03FF;
+            let secondPart = utf16Codes[i] & 0x03FF;
+            utf32Codes.push([(firstPart >> 6) + 1, ((firstPart & 0x3F) << 10) + secondPart]);
+        }
+
+        // character is not a surrogate
+        if (utf16Codes[i] < 0xD800 || utf16Codes[i] > 0xDFFF) {
+            utf32Codes.push([0, utf16Codes[i]]);
+        }
+    }
+
+    return utf32Codes;
+}
+function utf16CodesToUTF32(utf16Codes, sep="", prefix="", upper=true) {
+    let utf32Codes = utf16CodesToUTF32Codes(utf16Codes);
+    if (upper) {
+        return utf32Codes.map(code => prefix + code.map(group => group.toString(16).toUpperCase().padStart(4, "0")).join("")).join(sep);
+    }
+    else {
+        return utf32Codes.map(code => prefix + code.map(group => group.toString(16).toLowerCase().padStart(4, "0")).join("")).join(sep);
+    }
+}
+function utf32CodesToHTMLEntity(utf32Codes, upper=true, length="two-four") {
+    // get HTML entities
+    let htmlEntityContent = [];
+    for (let i=0; i<utf32Codes.length; i++) {
+        // character inside BMP
+        let uncapitalized;
+        if (utf32Codes[i][0] === 0) {
+            if (length === "one") {
+                uncapitalized = utf32Codes[i][1].toString(16);
+            }
+            else if (length === "two") {
+                uncapitalized = utf32Codes[i][1].toString(16).padStart(2, "0");
+            }
+            else if (length === "two-four") {
+                if (utf32Codes[i][1] < 0x0100) {
+                    uncapitalized = utf32Codes[i][1].toString(16).padStart(2, "0");
+                }
+                else {
+                    uncapitalized = utf32Codes[i][1].toString(16).padStart(4, "0");
+                }
+            }
+            else {
+                uncapitalized = utf32Codes[i][1].toString(16).padStart(4, "0");
+            }
+        }
+        // character outside BMP
+        else {
+            uncapitalized = utf32Codes[i][0].toString(16) + utf32Codes[i][1].toString(16).padStart(4, "0");
+        }
+        if (upper) {
+            htmlEntityContent.push(uncapitalized.toUpperCase());
+        }
+        else {
+            htmlEntityContent.push(uncapitalized.toLowerCase());
+        }
+    }
+    return htmlEntityContent.map(content => "&#x" + content + ";").join("");
+}
+
+const overwriteElem = document.getElementById("overwrite");
+const textElem = document.getElementById("text");
+const utf8Elem = document.getElementById("utf8");
+const utf8BinElem = document.getElementById("utf8-bin");
+const utf16Elem = document.getElementById("utf16");
+const utf16BinElem = document.getElementById("utf16-bin");
+const utf32Elem = document.getElementById("utf32");
+const utf32BinElem = document.getElementById("utf32-bin");
+const htmlEntityElem = document.getElementById("html-entity");
+const fromTextElem = document.getElementById("from-text");
+const fromUTF8Elem = document.getElementById("from-utf8");
+const fromUTF8BinElem = document.getElementById("from-utf8-bin");
+const fromUTF16Elem = document.getElementById("from-utf16");
+const fromUTF16BinElem = document.getElementById("from-utf16-bin");
+const fromUTF32Elem = document.getElementById("from-utf32");
+const fromUTF32BinElem = document.getElementById("from-utf32-bin");
+const utf8SepElem = document.getElementById("utf8-sep");
+const utf16SepElem = document.getElementById("utf16-sep");
+const utf32SepElem = document.getElementById("utf32-sep");
+const utf8PrefixElem = document.getElementById("utf8-prefix");
+const utf16PrefixElem = document.getElementById("utf16-prefix");
+const utf32PrefixElem = document.getElementById("utf32-prefix");
+const utf8CaseElem = document.getElementById("utf8-case");
+const utf16CaseElem = document.getElementById("utf16-case");
+const utf32CaseElem = document.getElementById("utf32-case");
+const htmlEntityCaseElem = document.getElementById("html-entity-case");
+const htmlEntityLengthElem = document.getElementById("html-entity-length");
+
+fromTextElem.addEventListener("click", () => {
+    let text = textElem.value;
+    let utf8Sep = sep[utf8SepElem.value];
+    let utf16Sep = sep[utf16SepElem.value];
+    let utf32Sep = sep[utf32SepElem.value];
+    let utf8Prefix = prefix[utf8PrefixElem.value];
+    let utf16Prefix = prefix[utf16PrefixElem.value];
+    let utf32Prefix = prefix[utf32PrefixElem.value];
+    let utf8Case = utf8CaseElem.value;
+    let utf16Case = utf16CaseElem.value;
+    let utf32Case = utf32CaseElem.value;
+    let htmlEntityCase = htmlEntityCaseElem.value;
+    let htmlEntityLength = htmlEntityLengthElem.value;
+    let utf16Codes = textToUTF16Codes(text);
+    if (utf16Codes === null) return;
+
+    // get UTF-8
+    let utf8 = utf16CodesToUTF8(utf16Codes, utf8Sep, utf8Prefix, utf8Case === "upper");
+    utf8Elem.value = utf8;
+    utf8BinElem.value = hexToBin(utf8);
+
+    // get UTF-16
+    let utf16 = utf16CodesToUTF16(utf16Codes, utf16Sep, utf16Prefix, utf16Case === "upper");
+    utf16Elem.value = utf16;
+    utf16BinElem.value = hexToBin(utf16);
+
+    // get UTF-32
+    let utf32 = utf16CodesToUTF32(utf16Codes, utf32Sep, utf32Prefix, utf32Case === "upper");
+    utf32Elem.value = utf32;
+    utf32BinElem.value = hexToBin(utf32);
+    
+    // get HTML entity
+    let htmlEntity = utf32CodesToHTMLEntity(utf16CodesToUTF32Codes(utf16Codes), htmlEntityCase === "upper", htmlEntityLength);
+    htmlEntityElem.value = htmlEntity;
+});
+
+fromUTF8Elem.addEventListener("click", () => {
+    let unsafeUTF8 = utf8Elem.value;
+    let overwrite = overwriteElem.checked;
+    let utf8Sep = sep[utf8SepElem.value];
+    let utf16Sep = sep[utf16SepElem.value];
+    let utf32Sep = sep[utf32SepElem.value];
+    let utf8Prefix = prefix[utf8PrefixElem.value];
+    let utf16Prefix = prefix[utf16PrefixElem.value];
+    let utf32Prefix = prefix[utf32PrefixElem.value];
+    let utf8Case = utf8CaseElem.value;
+    let utf16Case = utf16CaseElem.value;
+    let utf32Case = utf32CaseElem.value;
+    let htmlEntityCase = htmlEntityCaseElem.value;
+    let htmlEntityLength = htmlEntityLengthElem.value;
+    let utf16Codes = utf8ToUTF16Codes(unsafeUTF8);
+    if (utf16Codes === null) return;
+
+    // get text
+    let text = utf16CodesToText(utf16Codes);
+    textElem.value = text;
+    
+    // get UTF-8
+    let utf8 = utf16CodesToUTF8(utf16Codes, utf8Sep, utf8Prefix, utf8Case === "upper");
+    if (overwrite) utf8Elem.value = utf8;
+    utf8BinElem.value = hexToBin(utf8);
+
+    // get UTF-16
+    let utf16 = utf16CodesToUTF16(utf16Codes, utf16Sep, utf16Prefix, utf16Case === "upper");
+    utf16Elem.value = utf16;
+    utf16BinElem.value = hexToBin(utf16);
+
+    // get UTF-32
+    let utf32 = utf16CodesToUTF32(utf16Codes, utf32Sep, utf32Prefix, utf32Case === "upper");
+    utf32Elem.value = utf32;
+    utf32BinElem.value = hexToBin(utf32);
+
+    // get HTML entity
+    let htmlEntity = utf32CodesToHTMLEntity(utf16CodesToUTF32Codes(utf16Codes), htmlEntityCase === "upper", htmlEntityLength);
+    htmlEntityElem.value = htmlEntity;
+});
+
+fromUTF8BinElem.addEventListener("click", () => {
+    let unsafeUTF8Bin = utf8BinElem.value;
+    let overwrite = overwriteElem.checked;
+    let utf8Sep = sep[utf8SepElem.value];
+    let utf16Sep = sep[utf16SepElem.value];
+    let utf32Sep = sep[utf32SepElem.value];
+    let utf8Prefix = prefix[utf8PrefixElem.value];
+    let utf16Prefix = prefix[utf16PrefixElem.value];
+    let utf32Prefix = prefix[utf32PrefixElem.value];
+    let utf8Case = utf8CaseElem.value;
+    let utf16Case = utf16CaseElem.value;
+    let utf32Case = utf32CaseElem.value;
+    let htmlEntityCase = htmlEntityCaseElem.value;
+    let htmlEntityLength = htmlEntityLengthElem.value;
+    let unsafeUTF8 = binToHex(unsafeUTF8Bin)
+    if (unsafeUTF8 === null) return;
+    let utf16Codes = utf8ToUTF16Codes(unsafeUTF8);
+    if (utf16Codes === null) return;
+
+    // get text
+    let text = utf16CodesToText(utf16Codes);
+    textElem.value = text;
+    
+    // get UTF-8
+    let utf8 = utf16CodesToUTF8(utf16Codes, utf8Sep, utf8Prefix, utf8Case === "upper");
+    utf8Elem.value = utf8;
+    if (overwrite) utf8BinElem.value = hexToBin(utf8);
+
+    // get UTF-16
+    let utf16 = utf16CodesToUTF16(utf16Codes, utf16Sep, utf16Prefix, utf16Case === "upper");
+    utf16Elem.value = utf16;
+    utf16BinElem.value = hexToBin(utf16);
+
+    // get UTF-32
+    let utf32 = utf16CodesToUTF32(utf16Codes, utf32Sep, utf32Prefix, utf32Case === "upper");
+    utf32Elem.value = utf32;
+    utf32BinElem.value = hexToBin(utf32);
+
+    // get HTML entity
+    let htmlEntity = utf32CodesToHTMLEntity(utf16CodesToUTF32Codes(utf16Codes), htmlEntityCase === "upper", htmlEntityLength);
+    htmlEntityElem.value = htmlEntity;
+});
+
+fromUTF16Elem.addEventListener("click", () => {
+    let unsafeUTF16 = utf16Elem.value;
+    let overwrite = overwriteElem.checked;
+    let utf8Sep = sep[utf8SepElem.value];
+    let utf16Sep = sep[utf16SepElem.value];
+    let utf32Sep = sep[utf32SepElem.value];
+    let utf8Prefix = prefix[utf8PrefixElem.value];
+    let utf16Prefix = prefix[utf16PrefixElem.value];
+    let utf32Prefix = prefix[utf32PrefixElem.value];
+    let utf8Case = utf8CaseElem.value;
+    let utf16Case = utf16CaseElem.value;
+    let utf32Case = utf32CaseElem.value;
+    let htmlEntityCase = htmlEntityCaseElem.value;
+    let htmlEntityLength = htmlEntityLengthElem.value;
+    let utf16Codes = utf16ToUTF16Codes(unsafeUTF16);
+    if (utf16Codes === null) return;
+
+    // get text
+    let text = utf16CodesToText(utf16Codes);
+    textElem.value = text;
+
+    // get UTF-8
+    let utf8 = utf16CodesToUTF8(utf16Codes, utf8Sep, utf8Prefix, utf8Case === "upper");
+    utf8Elem.value = utf8;
+    utf8BinElem.value = hexToBin(utf8);
+    
+    // get UTF-16
+    let utf16 = utf16CodesToUTF16(utf16Codes, utf16Sep, utf16Prefix, utf16Case === "upper");
+    if (overwrite) utf16Elem.value = utf16;
+    utf16BinElem.value = hexToBin(utf16);
+
+    // get UTF-32
+    let utf32 = utf16CodesToUTF32(utf16Codes, utf32Sep, utf32Prefix, utf32Case === "upper");
+    utf32Elem.value = utf32;
+    utf32BinElem.value = hexToBin(utf32);
+
+    // get HTML entity
+    let htmlEntity = utf32CodesToHTMLEntity(utf16CodesToUTF32Codes(utf16Codes), htmlEntityCase === "upper", htmlEntityLength);
+    htmlEntityElem.value = htmlEntity;
+});
+
+fromUTF16BinElem.addEventListener("click", () => {
+    let unsafeUTF16Bin = utf16BinElem.value;
+    let overwrite = overwriteElem.checked;
+    let utf8Sep = sep[utf8SepElem.value];
+    let utf16Sep = sep[utf16SepElem.value];
+    let utf32Sep = sep[utf32SepElem.value];
+    let utf8Prefix = prefix[utf8PrefixElem.value];
+    let utf16Prefix = prefix[utf16PrefixElem.value];
+    let utf32Prefix = prefix[utf32PrefixElem.value];
+    let utf8Case = utf8CaseElem.value;
+    let utf16Case = utf16CaseElem.value;
+    let utf32Case = utf32CaseElem.value;
+    let htmlEntityCase = htmlEntityCaseElem.value;
+    let htmlEntityLength = htmlEntityLengthElem.value;
+    let unsafeUTF16 = binToHex(unsafeUTF16Bin)
+    if (unsafeUTF16 === null) return;
+    let utf16Codes = utf16ToUTF16Codes(unsafeUTF16);
+    if (utf16Codes === null) return;
+
+    // get text
+    let text = utf16CodesToText(utf16Codes);
+    textElem.value = text;
+    
+    // get UTF-8
+    let utf8 = utf16CodesToUTF8(utf16Codes, utf8Sep, utf8Prefix, utf8Case === "upper");
+    utf8Elem.value = utf8;
+    utf8BinElem.value = hexToBin(utf8);
+
+    // get UTF-16
+    let utf16 = utf16CodesToUTF16(utf16Codes, utf16Sep, utf16Prefix, utf16Case === "upper");
+    utf16Elem.value = utf16;
+    if (overwrite) utf16BinElem.value = hexToBin(utf16);
+
+    // get UTF-32
+    let utf32 = utf16CodesToUTF32(utf16Codes, utf32Sep, utf32Prefix, utf32Case === "upper");
+    utf32Elem.value = utf32;
+    utf32BinElem.value = hexToBin(utf32);
+
+    // get HTML entity
+    let htmlEntity = utf32CodesToHTMLEntity(utf16CodesToUTF32Codes(utf16Codes), htmlEntityCase === "upper", htmlEntityLength);
+    htmlEntityElem.value = htmlEntity;
+});
+
+fromUTF32Elem.addEventListener("click", () => {
+    let unsafeUTF32 = utf32Elem.value;
+    let overwrite = overwriteElem.checked;
+    let utf8Sep = sep[utf8SepElem.value];
+    let utf16Sep = sep[utf16SepElem.value];
+    let utf32Sep = sep[utf32SepElem.value];
+    let utf8Prefix = prefix[utf8PrefixElem.value];
+    let utf16Prefix = prefix[utf16PrefixElem.value];
+    let utf32Prefix = prefix[utf32PrefixElem.value];
+    let utf8Case = utf8CaseElem.value;
+    let utf16Case = utf16CaseElem.value;
+    let utf32Case = utf32CaseElem.value;
+    let htmlEntityCase = htmlEntityCaseElem.value;
+    let htmlEntityLength = htmlEntityLengthElem.value;
+    let utf16Codes = utf32ToUTF16Codes(unsafeUTF32);
+    if (utf16Codes === null) return;
+
+    // get text
+    let text = utf16CodesToText(utf16Codes);
+    textElem.value = text;
+
+    // get UTF-8
+    let utf8 = utf16CodesToUTF8(utf16Codes, utf8Sep, utf8Prefix, utf8Case === "upper");
+    utf8Elem.value = utf8;
+    utf8BinElem.value = hexToBin(utf8);
+
+    // get UTF-16
+    let utf16 = utf16CodesToUTF16(utf16Codes, utf16Sep, utf16Prefix, utf16Case === "upper");
+    utf16Elem.value = utf16;
+    utf16BinElem.value = hexToBin(utf16);
+
+    // get UTF-32
+    let utf32 = utf16CodesToUTF32(utf16Codes, utf32Sep, utf32Prefix, utf32Case === "upper");
+    if (overwrite) utf32Elem.value = utf32;
+    utf32BinElem.value = hexToBin(utf32);
+
+    // get HTML entity
+    let htmlEntity = utf32CodesToHTMLEntity(utf16CodesToUTF32Codes(utf16Codes), htmlEntityCase === "upper", htmlEntityLength);
+    htmlEntityElem.value = htmlEntity;
+});
+
+fromUTF32BinElem.addEventListener("click", () => {
+    let unsafeUTF32Bin = utf32BinElem.value;
+    let overwrite = overwriteElem.checked;
+    let utf8Sep = sep[utf8SepElem.value];
+    let utf16Sep = sep[utf16SepElem.value];
+    let utf32Sep = sep[utf32SepElem.value];
+    let utf8Prefix = prefix[utf8PrefixElem.value];
+    let utf16Prefix = prefix[utf16PrefixElem.value];
+    let utf32Prefix = prefix[utf32PrefixElem.value];
+    let utf8Case = utf8CaseElem.value;
+    let utf16Case = utf16CaseElem.value;
+    let utf32Case = utf32CaseElem.value;
+    let htmlEntityCase = htmlEntityCaseElem.value;
+    let htmlEntityLength = htmlEntityLengthElem.value;
+    let unsafeUTF32 = binToHex(unsafeUTF32Bin)
+    if (unsafeUTF32 === null) return;
+    let utf16Codes = utf32ToUTF16Codes(unsafeUTF32);
+    if (utf16Codes === null) return;
+
+    // get text
+    let text = utf16CodesToText(utf16Codes);
+    textElem.value = text;
+    
+    // get UTF-8
+    let utf8 = utf16CodesToUTF8(utf16Codes, utf8Sep, utf8Prefix, utf8Case === "upper");
+    utf8Elem.value = utf8;
+    utf8BinElem.value = hexToBin(utf8);
+
+    // get UTF-16
+    let utf16 = utf16CodesToUTF16(utf16Codes, utf16Sep, utf16Prefix, utf16Case === "upper");
+    utf16Elem.value = utf16;
+    utf16BinElem.value = hexToBin(utf16);
+
+    // get UTF-32
+    let utf32 = utf16CodesToUTF32(utf16Codes, utf32Sep, utf32Prefix, utf32Case === "upper");
+    utf32Elem.value = utf32;
+    if (overwrite) utf32BinElem.value = hexToBin(utf32);
+
+    // get HTML entity
+    let htmlEntity = utf32CodesToHTMLEntity(utf16CodesToUTF32Codes(utf16Codes), htmlEntityCase === "upper", htmlEntityLength);
+    htmlEntityElem.value = htmlEntity;
+});
+
+</script>
+
+</html>
